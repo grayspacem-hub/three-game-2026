@@ -1,51 +1,213 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Three.js Game 2026</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: #000;
-            font-family: Arial, sans-serif;
-        }
-        
-        #gameContainer {
-            position: relative;
-            width: 100vw;
-            height: 100vh;
-        }
-        
-        #score {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            font-size: 24px;
-            z-index: 100;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-        }
-        
-        #instructions {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            color: white;
-            font-size: 16px;
-            z-index: 100;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Tetris</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #070814;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      color: #fff;
+    }
+
+    #gameContainer {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #hud {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      display: grid;
+      gap: 10px;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      min-width: 260px;
+    }
+
+    #hud .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 14px;
+      opacity: 0.95;
+    }
+
+    #hud .value {
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
+    .panelTitle {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      opacity: 0.8;
+      text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    #nextPiece, #holdPiece {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.15;
+      white-space: pre;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      padding: 10px;
+      border-radius: 10px;
+    }
+
+    #controlsRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { background: rgba(255,255,255,0.12); }
+
+    label.toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      user-select: none;
+      opacity: 0.95;
+    }
+
+    #comboWrap {
+      display: grid;
+      gap: 6px;
+    }
+
+    #comboBar {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.16);
+      overflow: hidden;
+    }
+
+    #comboFill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgba(93,255,211,0.9), rgba(171,107,255,0.95));
+      transition: width 120ms linear;
+    }
+
+    #feverPill {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.22);
+      background: rgba(255, 72, 150, 0.18);
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    body.fever {
+      background: radial-gradient(1200px 800px at 50% 30%, rgba(255, 72, 150, 0.10), rgba(7,8,20,1) 70%);
+    }
+
+    #instructions {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      right: 16px;
+      z-index: 10;
+      padding: 12px 14px;
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      backdrop-filter: blur(8px);
+      font-size: 13px;
+      opacity: 0.95;
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    #banner {
+      position: absolute;
+      inset: 0;
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      font-weight: 800;
+      background: rgba(0,0,0,0.55);
+      text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
+    }
+
+    .hint { opacity: 0.85; }
+  </style>
 </head>
 <body>
-    <div id="gameContainer">
-        <div id="score">Score: 0</div>
-        <div id="instructions">Click cubes to score! Use mouse to orbit around.</div>
+  <div id="gameContainer">
+    <div id="hud">
+      <div id="controlsRow">
+        <label class="toggle">
+          <input id="arcadeToggle" type="checkbox" />
+          <span>Arcade Mode</span>
+        </label>
+        <button id="restartBtn" type="button">Restart</button>
+      </div>
+
+      <div class="row"><div>Score</div><div id="score" class="value">0</div></div>
+      <div class="row"><div>Lines</div><div id="lines" class="value">0</div></div>
+      <div class="row"><div>Level</div><div id="level" class="value">1</div></div>
+
+      <div id="feverPill">Fever</div>
+
+      <div id="comboWrap">
+        <div class="row"><div>Combo</div><div id="comboText" class="value">x1.00</div></div>
+        <div id="comboBar"><div id="comboFill"></div></div>
+      </div>
+
+      <div class="panelTitle">Next</div>
+      <div class="row"><div>Type</div><div id="nextType" class="value">—</div></div>
+      <div id="nextPiece"></div>
+
+      <div class="panelTitle">Hold</div>
+      <div class="row"><div>Type</div><div id="holdType" class="value">—</div></div>
+      <div id="holdPiece"></div>
     </div>
-    
-    <script type="module" src="/main.js"></script>
+
+    <div id="instructions">
+      <div><strong>Controls:</strong> ←/→ move · ↓ soft drop · Space hard drop · Z/X rotate · C hold · P pause</div>
+      <div class="hint">Arcade Mode adds power-ups, combos, and Fever. No refresh needed to restart.</div>
+    </div>
+
+    <div id="banner"></div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
 </body>
 </html>
