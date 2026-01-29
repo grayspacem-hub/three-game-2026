@@ -5,101 +5,221 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Tetris</title>
   <style>
+    :root {
+      /* Apple-ish: deep, neutral background + tasteful blue accents */
+      --bg: #060812;
+      --panel: rgba(18, 18, 24, 0.44);
+      --panel2: rgba(14, 16, 28, 0.40);
+      --border: rgba(255, 255, 255, 0.14);
+      --border2: rgba(255, 255, 255, 0.20);
+      --txt: rgba(255,255,255,0.96);
+      --muted: rgba(255,255,255,0.78);
+      --muted2: rgba(255,255,255,0.62);
+      --accentA: #0a84ff;
+      --accentB: #9ad7ff;
+      --ok: #30d158;
+      --danger: #ff3b30;
+      --shadow: 0 18px 60px rgba(0,0,0,0.58);
+    }
+
     body {
       margin: 0;
       padding: 0;
       overflow: hidden;
-      background: #070814;
+      background: var(--bg);
       font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
       color: #fff;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: geometricPrecision;
     }
 
     #gameContainer {
       position: relative;
       width: 100vw;
       height: 100vh;
+      isolation: isolate;
     }
 
+    /* --- HUD --- */
     #hud {
       position: absolute;
-      top: 16px;
-      left: 16px;
+      top: 14px;
+      left: 14px;
       z-index: 10;
       display: grid;
-      gap: 10px;
-      padding: 12px 14px;
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
-      backdrop-filter: blur(8px);
-      min-width: 260px;
-    }
-
-    #hud .row {
-      display: flex;
-      justify-content: space-between;
       gap: 12px;
-      font-size: 14px;
-      opacity: 0.95;
+      padding: 12px 12px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06)),
+        radial-gradient(900px 460px at 20% 0%, rgba(10,132,255,0.10), rgba(0,0,0,0) 60%),
+        radial-gradient(900px 500px at 90% 20%, rgba(154,215,255,0.08), rgba(0,0,0,0) 58%),
+        var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+      min-width: 280px;
+      max-width: min(380px, calc(100vw - 28px));
     }
 
-    #hud .value {
-      font-variant-numeric: tabular-nums;
-      font-weight: 700;
-    }
-
-    .panelTitle {
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      opacity: 0.8;
-      text-transform: uppercase;
-      margin-top: 2px;
-    }
-
-    #nextPiece, #holdPiece {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 12px;
-      line-height: 1.15;
-      white-space: pre;
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      padding: 10px;
-      border-radius: 10px;
-    }
-
-    #controlsRow {
+    #hudHeader {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      flex-wrap: wrap;
+      padding: 2px 4px;
     }
 
-    button {
-      appearance: none;
-      border: 1px solid rgba(255,255,255,0.18);
-      background: rgba(255,255,255,0.08);
-      color: #fff;
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-weight: 700;
-      cursor: pointer;
+    /* Unmistakable Arcade badge */
+    #arcadePill {
+      min-width: 122px;
+      justify-content: center;
     }
 
-    button:hover { background: rgba(255,255,255,0.12); }
+    /* iOS-ish switch (no deps) */
+    label.switch {
+      display: inline-flex;
+      align-items: center;
+      user-select: none;
+    }
+    label.switch input { display: none; }
+    label.switch .track {
+      width: 46px;
+      height: 28px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.20);
+      background: rgba(255,255,255,0.10);
+      position: relative;
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.12);
+      transition: background 180ms ease, border-color 180ms ease;
+    }
+    label.switch .thumb {
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.70));
+      position: absolute;
+      left: 2px;
+      top: 1.5px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+      transition: transform 180ms ease;
+    }
+    label.switch input:checked + .track {
+      background: rgba(48,209,88,0.24);
+      border-color: rgba(48,209,88,0.40);
+    }
+    label.switch input:checked + .track .thumb {
+      transform: translateX(18px);
+    }
 
-    label.toggle {
+    #titleWrap {
+      display: grid;
+      gap: 2px;
+      line-height: 1.05;
+    }
+
+    #gameTitle {
+      font-weight: 950;
+      letter-spacing: 0.02em;
+      font-size: 14px;
+      text-transform: uppercase;
+      opacity: 0.95;
+    }
+
+    #subTitle {
+      font-size: 12px;
+      opacity: 0.7;
+    }
+
+    .pill {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      font-size: 13px;
-      user-select: none;
-      opacity: 0.95;
+      border-radius: 999px;
+      border: 1px solid var(--border2);
+      padding: 7px 11px;
+      background: rgba(255,255,255,0.07);
+      font-size: 12px;
+      font-weight: 950;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+
+    .pillDot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.5);
+      box-shadow: 0 0 14px rgba(255,255,255,0.15);
+    }
+
+    .pill.on {
+      background: rgba(48,209,88,0.10);
+      border-color: rgba(48,209,88,0.32);
+    }
+    .pill.on .pillDot {
+      background: var(--ok);
+      box-shadow: 0 0 12px rgba(48,209,88,0.28);
+    }
+
+    .panelTitle {
+      font-size: 11px;
+      letter-spacing: 0.11em;
+      opacity: 0.74;
+      text-transform: uppercase;
+      margin-top: 2px;
+      padding: 0 4px;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 2px 4px;
+    }
+
+    .statBox {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      padding: 10px 10px;
+      display: grid;
+      gap: 4px;
+    }
+
+    .statLabel {
+      font-size: 11px;
+      opacity: 0.78;
+      text-transform: uppercase;
+      letter-spacing: 0.10em;
+    }
+
+    .statValue {
+      font-variant-numeric: tabular-nums;
+      font-weight: 950;
+      font-size: 18px;
+      letter-spacing: 0.02em;
+    }
+
+    #arcadeMeta {
+      display: none;
+      gap: 8px;
+      padding: 0 4px;
+    }
+
+    #arcadeMeta .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 12px;
+      opacity: 0.92;
     }
 
     #comboWrap {
-      display: grid;
+      display: none;
       gap: 6px;
+      padding: 0 4px;
     }
 
     #comboBar {
@@ -113,7 +233,7 @@
     #comboFill {
       height: 100%;
       width: 0%;
-      background: linear-gradient(90deg, rgba(93,255,211,0.9), rgba(171,107,255,0.95));
+      background: linear-gradient(90deg, rgba(10,132,255,0.95), rgba(154,215,255,0.95));
       transition: width 120ms linear;
     }
 
@@ -121,91 +241,390 @@
       display: none;
       align-items: center;
       justify-content: center;
-      padding: 6px 10px;
+      padding: 7px 10px;
       border-radius: 999px;
       border: 1px solid rgba(255,255,255,0.22);
-      background: rgba(255, 72, 150, 0.18);
-      font-weight: 900;
-      letter-spacing: 0.08em;
+      background: rgba(255, 72, 150, 0.20);
+      font-weight: 950;
+      letter-spacing: 0.10em;
       text-transform: uppercase;
+      margin: 2px 4px 0;
     }
 
     body.fever {
-      background: radial-gradient(1200px 800px at 50% 30%, rgba(255, 72, 150, 0.10), rgba(7,8,20,1) 70%);
+      /* still noticeable, but restrained */
+      background: radial-gradient(1200px 800px at 50% 30%, rgba(10, 132, 255, 0.10), rgba(6,8,18,1) 70%);
     }
 
+    .previews {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 0 4px;
+    }
+
+    .previewCard {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      overflow: hidden;
+    }
+
+    .previewHead {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.10);
+      font-size: 12px;
+      opacity: 0.9;
+    }
+
+    .previewType {
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.85;
+    }
+
+    pre {
+      margin: 0;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px;
+      line-height: 1.15;
+      white-space: pre;
+    }
+
+    #powerLegend {
+      display: none;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.05);
+      padding: 10px;
+      margin: 0 4px;
+    }
+
+    #powerLegend .legendTitle {
+      font-weight: 950;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      opacity: 0.80;
+      font-size: 11px;
+      margin-bottom: 8px;
+    }
+
+    .legendGrid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 6px;
+      font-size: 12px;
+      opacity: 0.92;
+    }
+
+    .legendItem {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .legendLeft {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .legendDot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      box-shadow: 0 0 14px rgba(255,255,255,0.22);
+      flex: 0 0 auto;
+    }
+
+    .legendName {
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      opacity: 0.92;
+      flex: 0 0 auto;
+    }
+
+    .legendDesc {
+      opacity: 0.72;
+      text-align: right;
+      min-width: 0;
+    }
+
+    /* --- Bottom instructions --- */
     #instructions {
       position: absolute;
-      bottom: 16px;
-      left: 16px;
-      right: 16px;
+      bottom: 14px;
+      left: 14px;
+      right: 14px;
       z-index: 10;
       padding: 12px 14px;
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
+      background: rgba(0, 0, 0, 0.33);
+      border: 1px solid var(--border);
+      border-radius: 14px;
       backdrop-filter: blur(8px);
-      font-size: 13px;
+      font-size: 12px;
       opacity: 0.95;
       display: flex;
       justify-content: space-between;
-      gap: 16px;
+      gap: 12px;
       flex-wrap: wrap;
     }
 
-    #banner {
+    .hint { opacity: 0.82; }
+
+    /* --- Overlay (Start/Pause/Gameover) --- */
+    #overlay {
       position: absolute;
       inset: 0;
-      z-index: 20;
+      z-index: 30;
       display: none;
       align-items: center;
       justify-content: center;
-      font-size: 28px;
-      font-weight: 800;
-      background: rgba(0,0,0,0.55);
-      text-shadow: 2px 2px 10px rgba(0,0,0,0.8);
+      padding: 16px;
+      background: radial-gradient(900px 680px at 50% 35%, rgba(0,0,0,0.12), rgba(0,0,0,0.62) 72%);
     }
 
-    .hint { opacity: 0.85; }
+    #overlayCard {
+      width: min(520px, calc(100vw - 24px));
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: linear-gradient(180deg, rgba(12, 12, 28, 0.82), rgba(0,0,0,0.62));
+      box-shadow: 0 22px 80px rgba(0,0,0,0.7);
+      padding: 18px;
+      backdrop-filter: blur(12px);
+    }
+
+    #overlayTitle {
+      font-size: 22px;
+      font-weight: 950;
+      letter-spacing: 0.02em;
+      margin: 0;
+    }
+
+    #overlaySubtitle {
+      margin-top: 6px;
+      opacity: 0.80;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    #overlayControls {
+      margin-top: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    #overlayButtons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.08);
+      color: var(--txt);
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-weight: 900;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      user-select: none;
+    }
+
+    button:hover { background: rgba(255,255,255,0.12); }
+
+    button.primary {
+      border-color: rgba(10,132,255,0.32);
+      background: linear-gradient(180deg, rgba(10,132,255,0.22), rgba(10,132,255,0.10));
+    }
+
+    button.danger {
+      border-color: rgba(255,59,48,0.30);
+      background: linear-gradient(180deg, rgba(255,59,48,0.18), rgba(255,59,48,0.09));
+    }
+
+    .overlayRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    label.toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      user-select: none;
+      opacity: 0.95;
+      font-weight: 750;
+    }
+
+    input[type="checkbox"] { transform: translateY(1px); }
+
+    /* --- Toasts --- */
+    #toasts {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 40;
+      display: grid;
+      gap: 10px;
+      pointer-events: none;
+      max-width: min(360px, calc(100vw - 28px));
+    }
+
+    .toast {
+      pointer-events: none;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.20);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.06)),
+        rgba(10,12,18,0.55);
+      backdrop-filter: blur(14px);
+      box-shadow: 0 16px 60px rgba(0,0,0,0.55);
+      padding: 10px 12px;
+      display: grid;
+      gap: 2px;
+      transform: translateY(-6px);
+      opacity: 0;
+      transition: opacity 160ms ease, transform 160ms ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .toastTitle {
+      font-weight: 950;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-size: 12px;
+    }
+
+    .toastBody {
+      font-size: 12px;
+      opacity: 0.82;
+      line-height: 1.25;
+    }
+
+    /* Mobile tweaks */
+    @media (max-width: 780px) {
+      #hud {
+        top: 10px;
+        left: 10px;
+        padding: 10px;
+        min-width: 240px;
+      }
+      #instructions { font-size: 11px; }
+      .statValue { font-size: 16px; }
+    }
+
+    @media (max-width: 520px) {
+      #instructions { display: none; }
+      #hud { max-width: calc(100vw - 20px); }
+      .previews { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <div id="gameContainer">
     <div id="hud">
-      <div id="controlsRow">
-        <label class="toggle">
-          <input id="arcadeToggle" type="checkbox" />
-          <span>Arcade Mode</span>
-        </label>
-        <button id="restartBtn" type="button">Restart</button>
+      <div id="hudHeader">
+        <div id="titleWrap">
+          <div id="gameTitle">3D Tetris</div>
+          <div id="subTitle">Classic + optional Arcade power-ups</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <label class="switch" title="Toggle Arcade Mode">
+            <input id="arcadeToggleHud" type="checkbox" />
+            <span class="track"><span class="thumb"></span></span>
+          </label>
+          <div id="arcadePill" class="pill" title="Arcade Mode status"><span class="pillDot"></span><span id="arcadeStatus">Arcade Off</span></div>
+        </div>
       </div>
 
-      <div class="row"><div>Score</div><div id="score" class="value">0</div></div>
-      <div class="row"><div>Lines</div><div id="lines" class="value">0</div></div>
-      <div class="row"><div>Level</div><div id="level" class="value">1</div></div>
+      <div class="stats">
+        <div class="statBox"><div class="statLabel">Score</div><div id="score" class="statValue">0</div></div>
+        <div class="statBox"><div class="statLabel">Lines</div><div id="lines" class="statValue">0</div></div>
+        <div class="statBox"><div class="statLabel">Level</div><div id="level" class="statValue">1</div></div>
+        <div class="statBox"><div class="statLabel">Power-up</div><div id="powerupProgress" class="statValue">—</div></div>
+      </div>
 
       <div id="feverPill">Fever</div>
 
+      <div id="arcadeMeta">
+        <div class="row"><div>Combo</div><div id="comboText" style="font-weight:950;font-variant-numeric:tabular-nums;">x1.00</div></div>
+      </div>
       <div id="comboWrap">
-        <div class="row"><div>Combo</div><div id="comboText" class="value">x1.00</div></div>
         <div id="comboBar"><div id="comboFill"></div></div>
       </div>
 
-      <div class="panelTitle">Next</div>
-      <div class="row"><div>Type</div><div id="nextType" class="value">—</div></div>
-      <div id="nextPiece"></div>
+      <div class="panelTitle">Next / Hold</div>
+      <div class="previews">
+        <div class="previewCard">
+          <div class="previewHead"><div style="font-weight:900;opacity:0.9;">Next</div><div id="nextType" class="previewType">—</div></div>
+          <pre id="nextPiece"></pre>
+        </div>
+        <div class="previewCard">
+          <div class="previewHead"><div style="font-weight:900;opacity:0.9;">Hold</div><div id="holdType" class="previewType">—</div></div>
+          <pre id="holdPiece"></pre>
+        </div>
+      </div>
 
-      <div class="panelTitle">Hold</div>
-      <div class="row"><div>Type</div><div id="holdType" class="value">—</div></div>
-      <div id="holdPiece"></div>
+      <div id="powerLegend">
+        <div class="legendTitle">Arcade power-ups</div>
+        <div class="legendGrid">
+          <div class="legendItem"><div class="legendLeft"><span class="legendDot" data-ptype="BOMB"></span><span class="legendName">Bomb</span></div><div class="legendDesc">clears a 3×3 area</div></div>
+          <div class="legendItem"><div class="legendLeft"><span class="legendDot" data-ptype="SLOW"></span><span class="legendName">Slow</span></div><div class="legendDesc">slows time for 10s</div></div>
+          <div class="legendItem"><div class="legendLeft"><span class="legendDot" data-ptype="COLUMN_WIPE"></span><span class="legendName">Column</span></div><div class="legendDesc">wipes 1 column</div></div>
+          <div class="legendItem"><div class="legendLeft"><span class="legendDot" data-ptype="BOTTOM_CLEAR"></span><span class="legendName">Bottom</span></div><div class="legendDesc">clears bottom row</div></div>
+        </div>
+      </div>
     </div>
 
     <div id="instructions">
       <div><strong>Controls:</strong> ←/→ move · ↓ soft drop · Space hard drop · Z/X rotate · C hold · P pause</div>
-      <div class="hint">Arcade Mode adds power-ups, combos, and Fever. No refresh needed to restart.</div>
+      <div class="hint">Arcade Mode adds power-ups, combos, and Fever. Power-ups spawn regularly when Arcade is ON.</div>
     </div>
 
-    <div id="banner"></div>
+    <div id="toasts"></div>
+
+    <div id="overlay">
+      <div id="overlayCard">
+        <h1 id="overlayTitle">3D Tetris</h1>
+        <div id="overlaySubtitle">Build lines to score. Toggle Arcade Mode for power-ups + combos + Fever. Press P anytime to pause.</div>
+
+        <div id="overlayControls">
+          <div class="overlayRow">
+            <label class="toggle">
+              <input id="arcadeToggle" type="checkbox" />
+              <span>Arcade Mode</span>
+            </label>
+            <div id="overlayHint" style="opacity:0.75;font-size:12px;">Power-ups can trigger when cleared <em>or</em> collected by landing on them.</div>
+          </div>
+
+          <div id="overlayButtons">
+            <button id="startBtn" type="button" class="primary">Start</button>
+            <button id="resumeBtn" type="button" class="primary">Resume</button>
+            <button id="restartBtn" type="button" class="danger">Restart</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script type="module" src="/main.js"></script>
