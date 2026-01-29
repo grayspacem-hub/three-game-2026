@@ -16,6 +16,7 @@ A lightweight 3D Tetris prototype built with Three.js and vanilla JavaScript.
 - **Ghost piece** (landing preview)
 - **Hold piece** (press `C`)
 - **Restart button** (no page refresh)
+- **Best score** stored locally in the browser
 
 ## Controls
 
@@ -39,6 +40,11 @@ npm run dev
 npm run build
 npm run preview
 ```
+
+### Preview Notes
+
+- `npm run preview` serves the production build from `dist`.
+- To test on another device, use `npm run preview -- --host`.
 
 ## Deployment (Vercel)
 

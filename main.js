@@ -86,6 +86,7 @@ function rotateMatrixCCW(m) {
 
 // --- UI ---
 const elScore = document.getElementById('score');
+const elBest = document.getElementById('best');
 const elLines = document.getElementById('lines');
 const elLevel = document.getElementById('level');
 const elNextType = document.getElementById('nextType');
@@ -262,6 +263,7 @@ let rimLightA, rimLightB;
 let vfxGroup;
 
 const powerLabelTex = new Map(); // ptype -> CanvasTexture
+const powerLabelMat = new Map(); // ptype -> SpriteMaterial
 
 const baseCamPos = new THREE.Vector3(0, 16, 22);
 const baseCamLook = new THREE.Vector3(0, 8.5, 0);
@@ -269,6 +271,7 @@ let shakeUntil = 0;
 let shakeMag = 0;
 
 const bursts = []; // { points, vel:Float32Array, life, maxLife }
+const powerVfx = []; // power-up meshes for cheap animation
 
 function initThree() {
   scene = new THREE.Scene();
@@ -514,11 +517,15 @@ function onResize() {
 let grid;
 let powerMap; // Map<"x,y", ptype>
 let score = 0;
+let bestScore = 0;
 let lines = 0;
 let level = 1;
 let baseDropIntervalMs = 800;
 let isPaused = false;
 let isGameOver = false;
+let bestToastShown = false;
+
+const BEST_SCORE_KEY = 'three-game-2026-best-score';
 
 let arcadeEnabled = false;
 
@@ -546,6 +553,19 @@ let slowUntil = 0;
 let lastTime = 0;
 let dropAccum = 0;
 let bag = [];
+let activeDirty = true;
+let ghostDirty = true;
+let fixedDirty = true;
+
+// Horizontal movement repeat (DAS/ARR)
+const MOVE_DAS_MS = 120;
+const MOVE_ARR_MS = 35;
+let moveHoldDir = 0; // -1 left, 1 right
+let moveHeldMs = 0;
+let moveRepeatMs = 0;
+let lastHorizKey = null; // last pressed horizontal key to resolve conflicts
+
+const MAX_FRAME_DT_MS = 50;
 
 // Arcade: reliable power-up spawning (knobs)
 const POWERUP_MIN_PIECES_BEFORE_CHANCE = 6;
@@ -563,6 +583,24 @@ function nowMs() {
 
 function newGrid() {
   return Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+}
+
+function loadBestScore() {
+  try {
+    const raw = localStorage.getItem(BEST_SCORE_KEY);
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed)) bestScore = parsed;
+  } catch (err) {
+    bestScore = 0;
+  }
+}
+
+function saveBestScore() {
+  try {
+    localStorage.setItem(BEST_SCORE_KEY, String(bestScore));
+  } catch (err) {
+    // Ignore storage errors (e.g., privacy mode).
+  }
 }
 
 function refillBag() {
@@ -624,7 +662,7 @@ function maybeSpawnPowerup({ force = false } = {}) {
   piecesSincePowerup = 0;
   linesSincePowerup = 0;
 
-  rebuildFixedMeshes();
+  fixedDirty = true;
 
   const colorHex = POWERUPS?.[ptype]?.color ?? 0xffffff;
   const c = new THREE.Color(colorHex);
@@ -650,6 +688,8 @@ function spawnPiece() {
   holdUsed = false;
 
   renderNextPreview(next);
+  activeDirty = true;
+  ghostDirty = true;
 
   if (collides(active, active.x, active.y, active.matrix)) {
     isGameOver = true;
@@ -855,6 +895,8 @@ function tryMove(dx, dy) {
   if (!collides(active, nx, ny, active.matrix)) {
     active.x = nx;
     active.y = ny;
+    activeDirty = true;
+    ghostDirty = true;
     return true;
   }
   return false;
@@ -882,6 +924,8 @@ function tryRotate(dir) {
       active.matrix = rotated;
       active.x = nx;
       active.y = ny;
+      activeDirty = true;
+      ghostDirty = true;
       return true;
     }
   }
@@ -895,6 +939,7 @@ function hardDrop() {
   while (tryMove(0, -1)) dropped++;
   // A little reward for hard drop
   score += Math.round(dropped * 2 * totalScoreMultiplier());
+  updateHud();
   lockPiece();
 }
 
@@ -923,13 +968,22 @@ function lockPiece() {
   }
 
   spawnPiece();
-  rebuildFixedMeshes();
+  fixedDirty = true;
 
   updatePowerupHud();
 }
 
 function updateHud() {
   elScore.textContent = String(score);
+  if (score > bestScore) {
+    bestScore = score;
+    saveBestScore();
+    if (!bestToastShown) {
+      toast({ title: 'New Best Score', body: `${bestScore}`, ttlMs: 1600 });
+      bestToastShown = true;
+    }
+  }
+  if (elBest) elBest.textContent = String(bestScore);
   elLines.textContent = String(lines);
   elLevel.textContent = String(level);
   updatePowerupHud();
@@ -968,6 +1022,8 @@ function holdPiece() {
   }
 
   holdUsed = true;
+  activeDirty = true;
+  ghostDirty = true;
 }
 
 // --- Rendering helpers ---
@@ -1030,6 +1086,7 @@ function spawnBurst(cellX, cellY, colorHex) {
 }
 
 function updateBursts(dtMs) {
+  if (bursts.length === 0) return;
   for (let i = bursts.length - 1; i >= 0; i--) {
     const b = bursts[i];
     b.life += dtMs;
@@ -1063,8 +1120,7 @@ function clearGroup(g) {
   for (let i = g.children.length - 1; i >= 0; i--) {
     const child = g.children[i];
     g.remove(child);
-    child.geometry?.dispose?.();
-    // materials are cached; do not dispose
+    // Shared geometries/materials are reused; avoid disposing here.
   }
 }
 
@@ -1129,8 +1185,21 @@ function getPowerLabelTexture(ptype, colorHex) {
   return tex;
 }
 
+function getPowerLabelMat(ptype, colorHex) {
+  if (powerLabelMat.has(ptype)) return powerLabelMat.get(ptype);
+  const mat = new THREE.SpriteMaterial({
+    map: getPowerLabelTexture(ptype, colorHex),
+    transparent: true,
+    opacity: 0.92,
+    depthWrite: false,
+  });
+  powerLabelMat.set(ptype, mat);
+  return mat;
+}
+
 function rebuildFixedMeshes() {
   clearGroup(fixedGroup);
+  powerVfx.length = 0;
 
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
@@ -1163,13 +1232,7 @@ function rebuildFixedMeshes() {
         g.add(ring);
 
         // Clear, readable label (billboard)
-        const sprMat = new THREE.SpriteMaterial({
-          map: getPowerLabelTexture(ptype, colorHex),
-          transparent: true,
-          opacity: 0.92,
-          depthWrite: false,
-        });
-        const label = new THREE.Sprite(sprMat);
+        const label = new THREE.Sprite(getPowerLabelMat(ptype, colorHex));
         label.position.set(0, 1.15, 0.12);
         label.scale.set(1.9, 0.95, 1);
         g.add(label);
@@ -1181,9 +1244,12 @@ function rebuildFixedMeshes() {
         g.userData.ring = ring;
         g.userData.label = label;
         fixedGroup.add(g);
+        powerVfx.push(g);
       }
     }
   }
+  fixedDirty = false;
+  ghostDirty = true;
 }
 
 function computeGhostY() {
@@ -1195,6 +1261,7 @@ function computeGhostY() {
 
 function rebuildGhostMeshes() {
   clearGroup(ghostGroup);
+  ghostDirty = false;
   if (!active || isGameOver) return;
 
   const gy = computeGhostY();
@@ -1222,6 +1289,7 @@ function rebuildGhostMeshes() {
 
 function rebuildActiveMeshes() {
   clearGroup(activeGroup);
+  activeDirty = false;
   if (!active) return;
   const m = active.matrix;
   for (let r = 0; r < m.length; r++) {
@@ -1245,6 +1313,17 @@ function rebuildActiveMeshes() {
 // --- Input ---
 const keys = new Set();
 
+function getHorizDir() {
+  const left = keys.has('ArrowLeft');
+  const right = keys.has('ArrowRight');
+  if (left && right) {
+    if (lastHorizKey === 'ArrowLeft') return -1;
+    if (lastHorizKey === 'ArrowRight') return 1;
+    return 0;
+  }
+  return left ? -1 : right ? 1 : 0;
+}
+
 window.addEventListener('keydown', (e) => {
   // Prevent page scrolling
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) e.preventDefault();
@@ -1263,8 +1342,6 @@ window.addEventListener('keydown', (e) => {
 
   if (e.key === 'c' || e.key === 'C') {
     holdPiece();
-    rebuildActiveMeshes();
-    rebuildGhostMeshes();
     return;
   }
 
@@ -1272,11 +1349,15 @@ window.addEventListener('keydown', (e) => {
 
   switch (e.key) {
     case 'ArrowLeft':
-      tryMove(-1, 0);
+    case 'ArrowRight': {
+      lastHorizKey = e.key;
+      const dir = getHorizDir();
+      if (dir !== 0) tryMove(dir, 0);
+      moveHoldDir = dir;
+      moveHeldMs = 0;
+      moveRepeatMs = 0;
       break;
-    case 'ArrowRight':
-      tryMove(1, 0);
-      break;
+    }
     case 'ArrowDown':
       if (tryMove(0, -1)) {
         score += Math.round(1 * totalScoreMultiplier());
@@ -1300,13 +1381,22 @@ window.addEventListener('keydown', (e) => {
     default:
       break;
   }
-
-  rebuildActiveMeshes();
-  rebuildGhostMeshes();
 });
 
 window.addEventListener('keyup', (e) => {
   keys.delete(e.key);
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const left = keys.has('ArrowLeft');
+    const right = keys.has('ArrowRight');
+    if (left) lastHorizKey = 'ArrowLeft';
+    else if (right) lastHorizKey = 'ArrowRight';
+    else lastHorizKey = null;
+
+    const dir = getHorizDir();
+    moveHoldDir = dir;
+    moveHeldMs = 0;
+    moveRepeatMs = 0;
+  }
 });
 
 function togglePause() {
@@ -1314,6 +1404,11 @@ function togglePause() {
   isPaused = !isPaused;
 
   if (isPaused) {
+    keys.clear();
+    moveHoldDir = 0;
+    moveHeldMs = 0;
+    moveRepeatMs = 0;
+    lastHorizKey = null;
     setOverlay(true, {
       title: 'Paused',
       subtitle: 'Press P to resume, or use the buttons below.',
@@ -1346,12 +1441,33 @@ function step(dtMs) {
   const soft = keys.has('ArrowDown');
   const interval = soft ? Math.max(30, effectiveDropIntervalMs() / 14) : effectiveDropIntervalMs();
 
+  // Horizontal DAS/ARR
+  const dir = getHorizDir();
+
+  if (dir !== moveHoldDir) {
+    moveHoldDir = dir;
+    moveHeldMs = 0;
+    moveRepeatMs = 0;
+  } else if (dir !== 0) {
+    moveHeldMs += dtMs;
+    if (moveHeldMs >= MOVE_DAS_MS) {
+      moveRepeatMs += dtMs;
+      while (moveRepeatMs >= MOVE_ARR_MS) {
+        moveRepeatMs -= MOVE_ARR_MS;
+        tryMove(dir, 0);
+      }
+    }
+  }
+
   while (dropAccum >= interval) {
     dropAccum -= interval;
 
     if (!tryMove(0, -1)) {
       lockPiece();
       break;
+    } else if (soft) {
+      score += Math.round(1 * totalScoreMultiplier());
+      updateHud();
     }
   }
 }
@@ -1389,7 +1505,7 @@ function updateArcadeVfx() {
 }
 
 function animate(t) {
-  const dt = t - lastTime;
+  const dt = Math.min(t - lastTime, MAX_FRAME_DT_MS);
   lastTime = t;
 
   // Background motion
@@ -1409,8 +1525,8 @@ function animate(t) {
   step(dt);
 
   // Subtle rotation on power-ups (only when meshes exist)
-  for (const child of fixedGroup.children) {
-    if (child?.userData?.isPower) {
+  if (powerVfx.length) {
+    for (const child of powerVfx) {
       child.userData.gem.rotation.y = t * 0.003;
       child.userData.ring.rotation.z = t * 0.003;
 
@@ -1422,8 +1538,9 @@ function animate(t) {
 
   updateBursts(dt);
 
-  rebuildActiveMeshes();
-  rebuildGhostMeshes();
+  if (fixedDirty) rebuildFixedMeshes();
+  if (activeDirty) rebuildActiveMeshes();
+  if (ghostDirty) rebuildGhostMeshes();
   updateArcadeVfx();
 
   // Camera shake (very small)
@@ -1455,6 +1572,7 @@ function resetArcadeState() {
 
 function clearAllPowerUps() {
   powerMap = new Map();
+  fixedDirty = true;
 }
 
 function restartGame() {
@@ -1466,6 +1584,12 @@ function restartGame() {
   baseDropIntervalMs = 800;
   isPaused = false;
   isGameOver = false;
+  bestToastShown = false;
+  keys.clear();
+  moveHoldDir = 0;
+  moveHeldMs = 0;
+  moveRepeatMs = 0;
+  lastHorizKey = null;
 
   hold = null;
   holdUsed = false;
@@ -1483,9 +1607,9 @@ function restartGame() {
   renderNextPreview(next);
   spawnPiece();
 
-  rebuildFixedMeshes();
-  rebuildActiveMeshes();
-  rebuildGhostMeshes();
+  fixedDirty = true;
+  activeDirty = true;
+  ghostDirty = true;
   updateHud();
 }
 
@@ -1503,7 +1627,7 @@ function setArcadeEnabled(on) {
   if (!arcadeEnabled) {
     if (grid) {
       clearAllPowerUps();
-      rebuildFixedMeshes();
+      fixedDirty = true;
     }
   }
 
@@ -1539,6 +1663,7 @@ elRestartBtn?.addEventListener('click', () => {
 });
 
 function startGame() {
+  loadBestScore();
   setArcadeEnabled(false);
   restartGame();
 
